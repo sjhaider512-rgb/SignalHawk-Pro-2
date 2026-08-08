@@ -85,6 +85,29 @@ if st.button("Analyse Market"):
     st.write(f"Stop Loss : {result['StopLoss']}")
     st.write(f"Take Profit : {result['TakeProfit']}")
 
+    st.subheader("Backtest Results")
+
+    backtest = result.get("Backtest", {})
+
+    b1, b2, b3, b4 = st.columns(4)
+
+    with b1:
+        st.metric("Total Trades", backtest.get("Total Trades", 0))
+
+    with b2:
+        st.metric("Win Rate", f"{backtest.get('Win Rate', 0)} %")
+
+    with b3:
+        st.metric("Wins", backtest.get("Wins", 0))
+
+    with b4:
+        st.metric("Losses", backtest.get("Losses", 0))
+
+    st.metric("Average Points", backtest.get("Average Points", 0))
+
+    with st.expander("Recent Backtest Trades"):
+         st.write(backtest.get("Trades", []))
+
     df = result["Data"].copy()
 
     # Rename back for Plotly

@@ -1,3 +1,4 @@
+from backtest import run_backtest
 import yfinance as yf 
 import pandas as pd
 
@@ -72,6 +73,8 @@ def analyse_market(pair, timeframe):
         signal, confidence, stop_loss, take_profit = signal_result
         score = None
 
+    backtest = run_backtest(df)
+
     return {
         "Signal": signal,
         "Confidence": confidence,
@@ -86,6 +89,7 @@ def analyse_market(pair, timeframe):
         "ATR": round(float(df["ATR"].iloc[-1]), 5),
         "StopLoss": stop_loss,
         "TakeProfit": take_profit,
+        "Backtest": backtest,
         "Data": df
     }
 
