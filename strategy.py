@@ -71,31 +71,44 @@ def generate_signal(df):
         else:
             score += 20
 
-    # Final signal
-    if trend == "BUY" and score >= 75 and adx >= 25 and macd > 0 and 50 <= rsi <= 70:
+    # Final signal - stricter filter
+    if (
+        trend == "BUY"
+        and score >= 90
+        and adx >= 25
+        and macd > 0
+        and 52 <= rsi <= 65
+        and price > ema20 > ema50 > ema200
+    ):
         signal = "BUY"
-    elif trend == "SELL" and score <= -75 and adx >= 25 and macd < 0 and 30 <= rsi <= 50:
+
+    elif (
+        trend == "SELL"
+        and score <= -90
+        and adx >= 25
+        and macd < 0
+        and 35 <= rsi <= 48
+        and price < ema20 < ema50 < ema200
+    ):
         signal = "SELL"
+
     else:
         signal = "WAIT"
 
-    confidence = min(abs(score), 100)
+    confidence = min(abs(score), 95)
 
-    if signal != "WAIT":
-        confidence = min(confidence + 5, 100)
-    else:
+    if signal == "WAIT":
         confidence = min(confidence, 60)
 
     stop_loss = None
     take_profit = None
 
-    # ATR-based trade levels
     if signal == "BUY":
-        stop_loss = round(price - (atr * 1.5), 5)
-        take_profit = round(price + (atr * 2), 5)
+        stop_loss = round(price - (atr * 2), 5)
+        take_profit = round(price + (atr * 4), 5)
 
     elif signal == "SELL":
-        stop_loss = round(price + (atr * 1.5), 5)
-        take_profit = round(price - (atr * 2), 5)
+        stop_loss = round(price + (atr * 2), 5)
+        take_profit = round(price - (atr * 4), 5)
 
     return signal, confidence, stop_loss, take_profit, score
