@@ -1,7 +1,8 @@
 import streamlit as st 
-from analysis import analyse_market
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+
+from analysis import analyse_market
+
 
 st.set_page_config(
     page_title="Signal Hawk Pro",
@@ -11,16 +12,13 @@ st.set_page_config(
 
 st.title("📈 Signal Hawk Pro")
 
-market = st.selectbox( 
+market = st.selectbox(
     "Market",
     [
-        "XAUUSD", # Gold
-        "XAGUSD", # Silver
-        "XPTUSD", # Platinum
-        "XPDUSD", # Palladium
+        "GC=F",
+                
     ]
 )
-
 
 timeframe = st.selectbox(
     "Timeframe",
@@ -30,24 +28,14 @@ timeframe = st.selectbox(
         "15 Minutes",
         "1 Hour",
         "4 Hours",
-        "1 Day"
-    ]
+        "1 Day",
+    ],
+    index=3
 )
 
 if st.button("Analyse Market"):
-
-   with st.spinner("Analysing..."): 
-
-    symbol_map = {
-        "XAUUSD": "GC=F",
-        "XAGUSD": "SI=F",
-        "XPTUSD": "PL=F",
-        "XPDUSD": "PA=F"
-    }
-
-    market = symbol_map.get(market, market)
-
-    result = analyse_market(market, timeframe)
+    with st.spinner("Analysing..."):
+        result = analyse_market(market, timeframe)
 
     if result is None:
         st.error("No data returned.")
@@ -57,33 +45,47 @@ if st.button("Analyse Market"):
         st.error(result["error"])
         st.stop()
 
-    st.success(f"Signal: {result['Signal']}")
+    signal = result.get("Signal", "WAIT")
 
-    col1, col2, col3 = st.columns(3) 
+    if signal == "BUY":
+        st.success(f"Signal: {signal}")
+    elif signal == "SELL":
+        st.error(f"Signal: {signal}")
+    else:
+        st.warning(f"Signal: {signal}")
+
+    safety_note = result.get("SafetyNote", "")
+    if safety_note:
+        if signal == "WAIT":
+            st.warning(safety_note)
+        else:
+            st.info(safety_note)
+
+    col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.metric("Confidence", f"{result['Confidence']} %")
+        st.metric("Confidence", f"{result.get('Confidence', 0)} %")
 
     with col2:
         st.metric("Score", result.get("Score", "N/A"))
 
     with col3:
-        st.metric("Current Price", result["Price"])
+        st.metric("Current Price", result.get("Price", "N/A"))
 
     st.subheader("Indicators")
 
-    st.write(f"EMA20 : {result['EMA20']}")
-    st.write(f"EMA50 : {result['EMA50']}")
-    st.write(f"EMA200 : {result['EMA200']}")
-    st.write(f"RSI : {result['RSI']}")
-    st.write(f"MACD : {result['MACD']}")
-    st.write(f"ADX : {result['ADX']}")
-    st.write(f"ATR : {result['ATR']}")
+    st.write(f"EMA20 : {result.get('EMA20')}")
+    st.write(f"EMA50 : {result.get('EMA50')}")
+    st.write(f"EMA200 : {result.get('EMA200')}")
+    st.write(f"RSI : {result.get('RSI')}")
+    st.write(f"MACD : {result.get('MACD')}")
+    st.write(f"ADX : {result.get('ADX')}")
+    st.write(f"ATR : {result.get('ATR')}")
 
     st.subheader("Trade Levels")
 
-    st.write(f"Stop Loss : {result['StopLoss']}")
-    st.write(f"Take Profit : {result['TakeProfit']}")
+    st.write(f"Stop Loss : {result.get('StopLoss')}")
+    st.write(f"Take Profit : {result.get('TakeProfit')}")
 
     st.subheader("Backtest Results")
 
@@ -106,93 +108,56 @@ if st.button("Analyse Market"):
     st.metric("Average Points", backtest.get("Average Points", 0))
 
     with st.expander("Recent Backtest Trades"):
-         st.write(backtest.get("Trades", []))
+        st.write(backtest.get("Trades", []))
 
-    df = result["Data"].copy()
+    df = result.get("Data")
 
-    # Rename back for Plotly
-    df["Open"] = df["open"]
-    df["High"] = df["high"]
-    df["Low"] = df["low"]
-    df["Close"] = df["close"]
+    if df is not None and not df.empty:
+        st.subheader("📊 Live Market Chart")
 
-    st.subheader("📊 Live Market Chart")
+        fig = go.Figure()
 
-    fig = make_subplots(
-        rows=3,
-        cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.03,
-        row_heights=[0.60, 0.20, 0.20]
-    )
+        fig.add_trace(
+            go.Candlestick(
+                x=df.index,
+                open=df["open"],
+                high=df["high"],
+                low=df["low"],
+                close=df["close"],
+                name="Price"
+            )
+        )
 
-    fig.add_trace(
-        go.Candlestick(
-            x=df.index,
-            open=df["Open"],
-            high=df["High"],
-            low=df["Low"],
-            close=df["Close"],
-            name="Price"
-        ),
-        row=1,
-        col=1
-    )
+        fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df["EMA20"],
+                mode="lines",
+                name="EMA20"
+            )
+        )
 
-    fig.add_trace(
-        go.Scatter(
-            x=df.index,
-            y=df["EMA20"],
-            name="EMA20"
-        ),
-        row=1,
-        col=1
-    )
+        fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df["EMA50"],
+                mode="lines",
+                name="EMA50"
+            )
+        )
 
-    fig.add_trace(
-        go.Scatter(
-            x=df.index,
-            y=df["EMA50"],
-            name="EMA50"
-        ),
-        row=1,
-        col=1
-    )
+        fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df["EMA200"],
+                mode="lines",
+                name="EMA200"
+            )
+        )
 
-    fig.add_trace(
-        go.Scatter(
-            x=df.index,
-            y=df["EMA200"],
-            name="EMA200"
-        ),
-        row=1,
-        col=1
-    )
+        fig.update_layout(
+            height=700,
+            xaxis_rangeslider_visible=False
+        )
 
-    fig.add_trace(
-        go.Scatter(
-            x=df.index,
-            y=df["RSI"],
-            name="RSI"
-        ),
-        row=2,
-        col=1
-    )
-
-    fig.add_trace(
-        go.Bar(
-            x=df.index,
-            y=df["MACD"],
-            name="MACD"
-        ),
-        row=3,
-        col=1
-    )
-
-    fig.update_layout(
-        height=900,
-        template="plotly_dark",
-        xaxis_rangeslider_visible=False
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
