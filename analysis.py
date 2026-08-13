@@ -1,9 +1,9 @@
-from backtest import run_backtest 
-import yfinance as yf
+import yfinance as yf 
 import pandas as pd
 
 from indicators import ema, rsi, macd, adx, atr
 from strategy import generate_signal
+from backtest import run_backtest
 
 
 def analyse_market(pair, timeframe):
@@ -25,59 +25,68 @@ def analyse_market(pair, timeframe):
     elif interval == "1h":
         period = "730d"
     else:
-        period = "2y"
+        period = "5y"
 
     df = yf.download(
         pair,
         period=period,
         interval=interval,
         progress=False,
-        auto_adjust=False
+        auto_adjust=False,
     )
 
     if df is None or df.empty:
         return {"error": "No data returned."}
 
-    # Fix multi-index columns if yfinance returns them
+    # Fix Yahoo multi-index columns if present
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
-    # Make column names simple lowercase
-    df = df.rename(columns={
-        "Open": "open",
-        "High": "high",
-        "Low": "low",
-        "Close": "close",
-        "Adj Close": "adj_close",
-        "Volume": "volume"
-    })
+    # Rename columns to lowercase
+    df = df.rename(
+        columns={
+            "Open": "open",
+            "High": "high",
+            "Low": "low",
+            "Close": "close",
+            "Adj Close": "adj_close",
+            "Volume": "volume",
+        }
+    )
 
-    needed_columns = ["open", "high", "low", "close"]
+    required_columns = ["open", "high", "low", "close"]
 
-    for col in needed_columns:
+    for col in required_columns:
         if col not in df.columns:
             return {"error": f"Missing column: {col}"}
 
-    df = df[needed_columns].copy()
-
-    # Convert 1-hour candles into 4-hour candles
-    if timeframe == "4 Hours":
-        df = df.resample("4H").agg({
-            "open": "first",
-            "high": "max",
-            "low": "min",
-            "close": "last"
-        })
-
+    df = df[required_columns].copy()
     df = df.dropna()
 
-    if len(df) < 220:
+    if df.empty:
+        return {"error": "No clean candle data available."}
+
+    # Convert 1 hour data into 4 hour candles
+    if timeframe == "4 Hours":
+        df = df.resample("4h").agg(
+            {
+                "open": "first",
+                "high": "max",
+                "low": "min",
+                "close": "last",
+            }
+        )
+        df = df.dropna()
+
+    if df.empty or len(df) < 220:
         return {"error": "Not enough candles to calculate indicators."}
 
     # Indicators
     df["EMA20"] = ema(df["close"], 20)
     df["EMA50"] = ema(df["close"], 50)
     df["EMA200"] = ema(df["close"], 200)
+
+    # Your indicators.py functions take 1 argument only
     df["RSI"] = rsi(df["close"])
     df["MACD"] = macd(df["close"])
     df["ADX"] = adx(df)
@@ -113,37 +122,40 @@ def analyse_market(pair, timeframe):
     average_points = backtest.get("Average Points", 0)
     current_rsi = float(df["RSI"].iloc[-1])
 
-    # Safety filter 1: not enough backtest trades
-    if total_trades < 50:
+    # Safety filters
+    if signal == "WAIT":
+        safety_note = "WAIT: no strong safe setup."
+        confidence = min(confidence, 60)
+
+    elif total_trades < 50:
         signal = "WAIT"
         confidence = min(confidence, 60)
         safety_note = "WAIT: not enough backtest trades."
 
-    # Safety filter 2: poor backtest result
-    elif win_rate < 45 or average_points <= 0:
+    elif win_rate < 55:
         signal = "WAIT"
         confidence = min(confidence, 60)
         safety_note = "WAIT: backtest result is weak."
 
-    # Safety filter 3: avoid BUY when RSI is too high
+    elif average_points <= 0:
+        signal = "WAIT"
+        confidence = min(confidence, 60)
+        safety_note = "WAIT: average backtest points are weak."
+
     elif signal == "BUY" and current_rsi >= 70:
         signal = "WAIT"
         confidence = min(confidence, 60)
-        safety_note = "WAIT: RSI is too high for BUY."
+        safety_note = "WAIT: RSI is too high for safe BUY."
 
-    # Safety filter 4: avoid SELL when RSI is too low
     elif signal == "SELL" and current_rsi <= 30:
         signal = "WAIT"
         confidence = min(confidence, 60)
-        safety_note = "WAIT: RSI is too low for SELL."
+        safety_note = "WAIT: RSI is too low for safe SELL."
 
-    elif signal in ["BUY", "SELL"]:
-        safety_note = "Signal passed safety checks."
-
-    else:
-        signal = "WAIT"
-        confidence = min(confidence, 60)
-        safety_note = "No valid trade setup."
+    # If final signal is WAIT, remove trade levels
+    if signal == "WAIT":
+        stop_loss = None
+        take_profit = None
 
     return {
         "Signal": signal,
@@ -161,5 +173,5 @@ def analyse_market(pair, timeframe):
         "TakeProfit": take_profit,
         "Backtest": backtest,
         "SafetyNote": safety_note,
-        "Data": df
+        "Data": df,
     }
