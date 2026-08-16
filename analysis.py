@@ -8,24 +8,19 @@ from backtest import run_backtest
 
 def analyse_market(pair, timeframe):
     interval_map = {
-        "1 Minute": "1m",
-        "5 Minutes": "5m",
         "15 Minutes": "15m",
         "1 Hour": "1h",
         "4 Hours": "1h",
-        "1 Day": "1d",
     }
 
     interval = interval_map.get(timeframe, "1h")
 
-    if interval == "1m":
-        period = "7d"
-    elif interval in ["5m", "15m"]:
+    if interval == "15m":
         period = "60d"
     elif interval == "1h":
         period = "730d"
     else:
-        period = "5y"
+        period = "730d"
 
     df = yf.download(
         pair,
@@ -36,13 +31,11 @@ def analyse_market(pair, timeframe):
     )
 
     if df is None or df.empty:
-        return {"error": "No data returned."}
+        return {"error": "No data returned from Yahoo Finance."}
 
-    # Fix Yahoo multi-index columns if present
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
-    # Rename columns to lowercase
     df = df.rename(
         columns={
             "Open": "open",
@@ -66,7 +59,6 @@ def analyse_market(pair, timeframe):
     if df.empty:
         return {"error": "No clean candle data available."}
 
-    # Convert 1 hour data into 4 hour candles
     if timeframe == "4 Hours":
         df = df.resample("4h").agg(
             {
@@ -81,78 +73,55 @@ def analyse_market(pair, timeframe):
     if df.empty or len(df) < 220:
         return {"error": "Not enough candles to calculate indicators."}
 
-    # Indicators
     df["EMA20"] = ema(df["close"], 20)
     df["EMA50"] = ema(df["close"], 50)
     df["EMA200"] = ema(df["close"], 200)
-
-    # Your indicators.py functions take 1 argument only
-    df["RSI"] = rsi(df["close"])
+    df["RSI"] = rsi(df["close"], 14)
     df["MACD"] = macd(df["close"])
-    df["ADX"] = adx(df)
-    df["ATR"] = atr(df)
+    df["ADX"] = adx(df, 14)
+    df["ATR"] = atr(df, 14)
 
     df = df.dropna()
 
     if df.empty or len(df) < 220:
-        return {"error": "Not enough candles to calculate indicators."}
+        return {"error": "Not enough clean indicator data."}
 
-    # Generate signal safely
     signal_result = generate_signal(df)
 
-    if signal_result is None:
-        signal = "WAIT"
-        confidence = 60
-        stop_loss = None
-        take_profit = None
-        score = 0
-    elif len(signal_result) == 5:
-        signal, confidence, stop_loss, take_profit, score = signal_result
+    if len(signal_result) == 6:
+        signal, confidence, stop_loss, take_profit, score, safety_note = signal_result
     else:
-        signal, confidence, stop_loss, take_profit = signal_result
-        score = 0
+        signal, confidence, stop_loss, take_profit, score = signal_result
+        safety_note = "Signal checked."
 
-    # Run faster backtest
     backtest = run_backtest(df)
-
-    safety_note = "Signal passed basic checks."
 
     total_trades = backtest.get("Total Trades", 0)
     win_rate = backtest.get("Win Rate", 0)
     average_points = backtest.get("Average Points", 0)
-    current_rsi = float(df["RSI"].iloc[-1])
 
-    # Safety filters
-    if signal == "WAIT":
-        safety_note = "WAIT: no strong safe setup."
-        confidence = min(confidence, 60)
+    if signal in ["BUY", "SELL"]:
+        if total_trades < 5:
+            signal = "WAIT"
+            confidence = 0
+            stop_loss = None
+            take_profit = None
+            safety_note = "WAIT: not enough backtest trades."
 
-    elif total_trades < 50:
-        signal = "WAIT"
-        confidence = min(confidence, 60)
-        safety_note = "WAIT: not enough backtest trades."
+        elif win_rate < 45:
+            signal = "WAIT"
+            confidence = 0
+            stop_loss = None
+            take_profit = None
+            safety_note = "WAIT: backtest result is weak."
 
-    elif win_rate < 55:
-        signal = "WAIT"
-        confidence = min(confidence, 60)
-        safety_note = "WAIT: backtest result is weak."
+        elif average_points <= 0:
+            signal = "WAIT"
+            confidence = 0
+            stop_loss = None
+            take_profit = None
+            safety_note = "WAIT: average backtest points are weak."
 
-    elif average_points <= 0:
-        signal = "WAIT"
-        confidence = min(confidence, 60)
-        safety_note = "WAIT: average backtest points are weak."
-
-    elif signal == "BUY" and current_rsi >= 70:
-        signal = "WAIT"
-        confidence = min(confidence, 60)
-        safety_note = "WAIT: RSI is too high for safe BUY."
-
-    elif signal == "SELL" and current_rsi <= 30:
-        signal = "WAIT"
-        confidence = min(confidence, 60)
-        safety_note = "WAIT: RSI is too low for safe SELL."
-
-    # If final signal is WAIT, remove trade levels
     if signal == "WAIT":
         stop_loss = None
         take_profit = None

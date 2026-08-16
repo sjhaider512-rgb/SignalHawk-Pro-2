@@ -3,53 +3,33 @@ from strategy import generate_signal
 
 def run_backtest(df, max_hold_candles=10, max_backtest_candles=700):
     """
-    Simple SignalHawk Pro backtest.
-
-    It uses your existing strategy.py generate_signal() function.
-    The dataframe must already contain:
-    close, high, low, EMA20, EMA50, EMA200, RSI, MACD, ADX, ATR
+    Fast backtest for Signal Hawk Commodities Bot.
     """
 
     trades = []
 
     if df is None or df.empty:
-        return {
-            "Total Trades": 0,
-            "BUY Trades": 0,
-            "SELL Trades": 0,
-            "Wins": 0,
-            "Losses": 0,
-            "Win Rate": 0,
-            "Average Points": 0,
-            "Trades": []
-        }
+        return empty_result()
+
+    if len(df) > max_backtest_candles:
+        df = df.tail(max_backtest_candles).copy()
 
     if len(df) < 220:
-        return {
-            "Total Trades": 0,
-            "BUY Trades": 0,
-            "SELL Trades": 0,
-            "Wins": 0,
-            "Losses": 0,
-            "Win Rate": 0,
-            "Average Points": 0,
-            "Trades": []
-        } 
+        return empty_result()
 
-    start_index = max(200, len(df) - max_backtest_candles) 
+    start_index = 200
 
     for i in range(start_index, len(df) - max_hold_candles - 1):
-    
-
         history = df.iloc[:i + 1].copy()
 
-        signal_result = generate_signal(history)
+        result = generate_signal(history)
 
-        if len(signal_result) == 5:
-            signal, confidence, stop_loss, take_profit, score = signal_result
+        if len(result) == 6:
+            signal, confidence, stop_loss, take_profit, score, safety_note = result
+        elif len(result) == 5:
+            signal, confidence, stop_loss, take_profit, score = result
         else:
-            signal, confidence, stop_loss, take_profit = signal_result
-            score = None
+            continue
 
         if signal not in ["BUY", "SELL"]:
             continue
@@ -133,4 +113,17 @@ def run_backtest(df, max_hold_candles=10, max_backtest_candles=700):
         "Win Rate": win_rate,
         "Average Points": average_points,
         "Trades": trades[-20:]
+    }
+
+
+def empty_result():
+    return {
+        "Total Trades": 0,
+        "BUY Trades": 0,
+        "SELL Trades": 0,
+        "Wins": 0,
+        "Losses": 0,
+        "Win Rate": 0,
+        "Average Points": 0,
+        "Trades": []
     }

@@ -1,119 +1,140 @@
 import streamlit as st 
 import plotly.graph_objects as go
+import pandas as pd
 
 from analysis import analyse_market
 
 
 st.set_page_config(
-    page_title="Signal Hawk Pro",
+    page_title="Signal Hawk Commodities Bot",
     page_icon="📈",
     layout="wide"
 )
 
-st.title("📈 Signal Hawk Pro")
+st.title("📈 Signal Hawk Commodities Bot")
+st.caption("Gold, Platinum and Oil signal bot — BUY / SELL / WAIT")
 
-market = st.selectbox(
+markets = {
+    "Gold": "GC=F",
+    "Platinum": "PL=F",
+    "WTI Crude Oil": "CL=F",
+    "Brent Crude Oil": "BZ=F",
+}
+
+market_name = st.selectbox(
     "Market",
-    [
-        "GC=F",
-                
-    ]
+    list(markets.keys())
 )
+
+market = markets[market_name]
 
 timeframe = st.selectbox(
     "Timeframe",
     [
-        "1 Minute",
-        "5 Minutes",
         "15 Minutes",
         "1 Hour",
         "4 Hours",
-        "1 Day",
-    ],
-    index=3
+    ]
 )
 
-if st.button("Analyse Market"):
-    with st.spinner("Analysing..."):
-        result = analyse_market(market, timeframe)
+st.write(f"Selected market: **{market_name} ({market})**")
+st.write(f"Selected timeframe: **{timeframe}**")
 
-    if result is None:
-        st.error("No data returned.")
-        st.stop()
+analyse_button = st.button("Analyse Market")
+
+if analyse_button:
+    with st.spinner("Analysing market..."):
+        result = analyse_market(market, timeframe)
 
     if "error" in result:
         st.error(result["error"])
-        st.stop()
 
-    signal = result.get("Signal", "WAIT")
-
-    if signal == "BUY":
-        st.success(f"Signal: {signal}")
-    elif signal == "SELL":
-        st.error(f"Signal: {signal}")
     else:
-        st.warning(f"Signal: {signal}")
+        signal = result["Signal"]
+        safety_note = result.get("SafetyNote", "")
 
-    safety_note = result.get("SafetyNote", "")
-    if safety_note:
-        if signal == "WAIT":
-            st.warning(safety_note)
+        st.subheader("Final Signal")
+
+        if signal == "BUY":
+            st.success("🟢 BUY")
+        elif signal == "SELL":
+            st.error("🔴 SELL")
         else:
-            st.info(safety_note)
+            st.warning("🟡 WAIT")
 
-    col1, col2, col3 = st.columns(3)
+        st.info(safety_note)
 
-    with col1:
-        st.metric("Confidence", f"{result.get('Confidence', 0)} %")
+        col1, col2, col3 = st.columns(3)
 
-    with col2:
-        st.metric("Score", result.get("Score", "N/A"))
+        with col1:
+            st.metric("Confidence", f"{result['Confidence']}%")
 
-    with col3:
-        st.metric("Current Price", result.get("Price", "N/A"))
+        with col2:
+            st.metric("Score", result["Score"])
 
-    st.subheader("Indicators")
+        with col3:
+            st.metric("Current Price", result["Price"])
 
-    st.write(f"EMA20 : {result.get('EMA20')}")
-    st.write(f"EMA50 : {result.get('EMA50')}")
-    st.write(f"EMA200 : {result.get('EMA200')}")
-    st.write(f"RSI : {result.get('RSI')}")
-    st.write(f"MACD : {result.get('MACD')}")
-    st.write(f"ADX : {result.get('ADX')}")
-    st.write(f"ATR : {result.get('ATR')}")
+        st.subheader("Trade Levels")
 
-    st.subheader("Trade Levels")
+        col4, col5 = st.columns(2)
 
-    st.write(f"Stop Loss : {result.get('StopLoss')}")
-    st.write(f"Take Profit : {result.get('TakeProfit')}")
+        with col4:
+            st.metric("Stop Loss", result["StopLoss"])
 
-    st.subheader("Backtest Results")
+        with col5:
+            st.metric("Take Profit", result["TakeProfit"])
 
-    backtest = result.get("Backtest", {})
+        st.subheader("Indicators")
 
-    b1, b2, b3, b4 = st.columns(4)
+        col6, col7, col8, col9 = st.columns(4)
 
-    with b1:
-        st.metric("Total Trades", backtest.get("Total Trades", 0))
+        with col6:
+            st.metric("EMA20", result["EMA20"])
+            st.metric("EMA50", result["EMA50"])
 
-    with b2:
-        st.metric("Win Rate", f"{backtest.get('Win Rate', 0)} %")
+        with col7:
+            st.metric("EMA200", result["EMA200"])
+            st.metric("RSI", result["RSI"])
 
-    with b3:
-        st.metric("Wins", backtest.get("Wins", 0))
+        with col8:
+            st.metric("MACD", result["MACD"])
+            st.metric("ADX", result["ADX"])
 
-    with b4:
-        st.metric("Losses", backtest.get("Losses", 0))
+        with col9:
+            st.metric("ATR", result["ATR"])
 
-    st.metric("Average Points", backtest.get("Average Points", 0))
+        backtest = result["Backtest"]
 
-    with st.expander("Recent Backtest Trades"):
-        st.write(backtest.get("Trades", []))
+        st.subheader("Backtest Results")
 
-    df = result.get("Data")
+        col10, col11, col12, col13 = st.columns(4)
 
-    if df is not None and not df.empty:
-        st.subheader("📊 Live Market Chart")
+        with col10:
+            st.metric("Total Trades", backtest["Total Trades"])
+
+        with col11:
+            st.metric("Win Rate", f"{backtest['Win Rate']}%")
+
+        with col12:
+            st.metric("Wins", backtest["Wins"])
+
+        with col13:
+            st.metric("Losses", backtest["Losses"])
+
+        st.metric("Average Points", backtest["Average Points"])
+
+        with st.expander("Recent Backtest Trades"):
+            trades = backtest.get("Trades", [])
+
+            if trades:
+                st.dataframe(pd.DataFrame(trades), use_container_width=True)
+            else:
+                st.write("No recent trades.")
+
+        st.subheader("Live Market Chart")
+
+        df = result["Data"].tail(150)
 
         fig = go.Figure()
 
@@ -156,8 +177,13 @@ if st.button("Analyse Market"):
         )
 
         fig.update_layout(
-            height=700,
-            xaxis_rangeslider_visible=False
+            height=600,
+            xaxis_rangeslider_visible=False,
+            title=f"{market_name} - {timeframe}"
         )
 
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.warning(
+            "This bot gives signals only. It is not financial advice and should not be used for automatic trading."
+        )
