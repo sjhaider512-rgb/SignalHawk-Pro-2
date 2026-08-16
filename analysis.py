@@ -1,4 +1,4 @@
-import yfinance as yf 
+import yfinance as yf
 import pandas as pd
 
 from indicators import ema, rsi, macd, adx, atr
@@ -8,19 +8,24 @@ from backtest import run_backtest
 
 def analyse_market(pair, timeframe):
     interval_map = {
+        "1 Minute": "1m",
+        "5 Minutes": "5m",
         "15 Minutes": "15m",
         "1 Hour": "1h",
         "4 Hours": "1h",
+        "1 Day": "1d",
     }
 
     interval = interval_map.get(timeframe, "1h")
 
-    if interval == "15m":
+    if interval == "1m":
+        period = "7d"
+    elif interval in ["5m", "15m"]:
         period = "60d"
     elif interval == "1h":
         period = "730d"
     else:
-        period = "730d"
+        period = "5y"
 
     df = yf.download(
         pair,
@@ -31,7 +36,7 @@ def analyse_market(pair, timeframe):
     )
 
     if df is None or df.empty:
-        return {"error": "No data returned from Yahoo Finance."}
+        return {"error": "No data returned."}
 
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
@@ -76,51 +81,62 @@ def analyse_market(pair, timeframe):
     df["EMA20"] = ema(df["close"], 20)
     df["EMA50"] = ema(df["close"], 50)
     df["EMA200"] = ema(df["close"], 200)
-    df["RSI"] = rsi(df["close"], 14)
+
+    df["RSI"] = rsi(df["close"])
     df["MACD"] = macd(df["close"])
-    df["ADX"] = adx(df, 14)
-    df["ATR"] = atr(df, 14)
+    df["ADX"] = adx(df)
+    df["ATR"] = atr(df)
 
     df = df.dropna()
 
     if df.empty or len(df) < 220:
-        return {"error": "Not enough clean indicator data."}
+        return {"error": "Not enough candles to calculate indicators."}
 
     signal_result = generate_signal(df)
 
-    if len(signal_result) == 6:
-        signal, confidence, stop_loss, take_profit, score, safety_note = signal_result
-    else:
+    if signal_result is None:
+        signal = "WAIT"
+        confidence = 50
+        stop_loss = None
+        take_profit = None
+        score = 0
+    elif len(signal_result) == 5:
         signal, confidence, stop_loss, take_profit, score = signal_result
-        safety_note = "Signal checked."
+    else:
+        signal, confidence, stop_loss, take_profit = signal_result
+        score = 0
 
     backtest = run_backtest(df)
 
     total_trades = backtest.get("Total Trades", 0)
     win_rate = backtest.get("Win Rate", 0)
     average_points = backtest.get("Average Points", 0)
+    current_rsi = float(df["RSI"].iloc[-1])
 
-    if signal in ["BUY", "SELL"]:
-        if total_trades < 5:
-            signal = "WAIT"
-            confidence = 0
-            stop_loss = None
-            take_profit = None
-            safety_note = "WAIT: not enough backtest trades."
+    safety_note = "TEST MODE: signal shown for testing only. Do not use real money."
 
-        elif win_rate < 45:
-            signal = "WAIT"
-            confidence = 0
-            stop_loss = None
-            take_profit = None
-            safety_note = "WAIT: backtest result is weak."
+    # Basic safety only
+    if signal == "BUY" and current_rsi >= 75:
+        signal = "WAIT"
+        confidence = min(confidence, 60)
+        safety_note = "WAIT: RSI is too high for BUY."
 
-        elif average_points <= 0:
-            signal = "WAIT"
-            confidence = 0
-            stop_loss = None
-            take_profit = None
-            safety_note = "WAIT: average backtest points are weak."
+    elif signal == "SELL" and current_rsi <= 25:
+        signal = "WAIT"
+        confidence = min(confidence, 60)
+        safety_note = "WAIT: RSI is too low for SELL."
+
+    elif signal == "WAIT":
+        safety_note = "WAIT: no clear setup from strategy."
+
+    elif total_trades < 10:
+        safety_note = "TEST MODE: signal shown, but backtest trades are low."
+
+    elif win_rate < 50:
+        safety_note = "TEST MODE: signal shown, but backtest result is weak."
+
+    elif average_points <= 0:
+        safety_note = "TEST MODE: signal shown, but average backtest points are weak."
 
     if signal == "WAIT":
         stop_loss = None
