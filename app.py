@@ -2,6 +2,7 @@ import streamlit as st
 import plotly.graph_objects as go
 
 from analysis import analyse_market
+from telegram_alert import send_telegram_alert
 
 
 st.set_page_config(
@@ -11,13 +12,11 @@ st.set_page_config(
 )
 
 st.title("📈 Signal Hawk Commodities Bot")
-st.write("Gold, Platinum and Oil signal bot — BUY / SELL / WAIT")
+st.write("Gold and Platinum signal bot — BUY / SELL / WAIT")
 
 market_options = {
     "Gold": "GC=F",
     "Platinum": "PL=F",
-    "WTI Crude Oil": "CL=F",
-    "Brent Crude Oil": "BZ=F",
 }
 
 market_name = st.selectbox(
@@ -212,7 +211,6 @@ def display_strong_result(results):
     final_confidence = min(confidences)
     final_score = sum(scores)
 
-    # Use 4H levels for safer wider stop loss and take profit
     main_result = r4h
 
     st.subheader("Final Strong Signal")
@@ -226,6 +224,32 @@ def display_strong_result(results):
 
     st.info(note)
     st.warning("TEST MODE: use this for demo or paper testing only.")
+
+    if strong_signal in ["STRONG BUY", "STRONG SELL"]:
+        telegram_message = f"""
+🚨 Signal Hawk Commodities Alert
+
+Market: {market_name}
+Signal: {strong_signal}
+Confidence: {final_confidence}%
+Current Price: {main_result.get("Price", "-")}
+Stop Loss: {main_result.get("StopLoss", "-")}
+Take Profit: {main_result.get("TakeProfit", "-")}
+
+15m: {r15.get("Signal", "WAIT")}
+1h: {r1h.get("Signal", "WAIT")}
+4h: {r4h.get("Signal", "WAIT")}
+
+Mode: Test / paper trading only
+"""
+
+        if st.button("Send Telegram Alert"):
+            sent, message = send_telegram_alert(telegram_message)
+
+            if sent:
+                st.success("Telegram alert sent.")
+            else:
+                st.error(f"Telegram alert failed: {message}")
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Final Confidence", f"{final_confidence}%")
