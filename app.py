@@ -51,6 +51,18 @@ st.write(f"Selected market: **{market_name} ({pair})**")
 st.write(f"Selected mode: **{mode}**")
 
 
+# Telegram test button
+if st.button("Test Telegram Connection"):
+    sent, message = send_telegram_alert(
+        "✅ Signal Hawk Commodities Telegram test message received."
+    )
+
+    if sent:
+        st.success("Telegram test message sent.")
+    else:
+        st.error(f"Telegram test failed: {message}")
+
+
 def show_chart(result, title):
     df = result.get("Data")
 
@@ -240,6 +252,7 @@ Take Profit: {main_result.get("TakeProfit", "-")}
 1h: {r1h.get("Signal", "WAIT")}
 4h: {r4h.get("Signal", "WAIT")}
 
+Platform: BullionVault
 Mode: Test / paper trading only
 """
 
