@@ -1,11 +1,17 @@
-import requests 
-import streamlit as st
+import os
+import requests
 
 
 def send_telegram_alert(message):
     try:
-        token = st.secrets["TELEGRAM_BOT_TOKEN"]
-        chat_id = st.secrets["TELEGRAM_CHAT_ID"]
+        token = os.getenv("TELEGRAM_BOT_TOKEN")
+        chat_id = os.getenv("TELEGRAM_CHAT_ID")
+
+        if not token:
+            return False, "Missing TELEGRAM_BOT_TOKEN"
+
+        if not chat_id:
+            return False, "Missing TELEGRAM_CHAT_ID"
 
         url = f"https://api.telegram.org/bot{token}/sendMessage"
 
