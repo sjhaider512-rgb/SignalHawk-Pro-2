@@ -12,10 +12,11 @@ st.set_page_config(
 )
 
 st.title("📈 Signal Hawk Commodities Bot")
-st.write("Gold and Platinum signal bot — BUY / SELL / WAIT")
+st.write("Gold, Silver and Platinum signal bot — BUY / SELL / WAIT")
 
 market_options = {
     "Gold": "GC=F",
+    "Silver":"SI=F",
     "Platinum": "PL=F",
 }
 
